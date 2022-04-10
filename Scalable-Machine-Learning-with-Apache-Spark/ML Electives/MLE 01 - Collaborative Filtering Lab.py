@@ -102,12 +102,17 @@ display(ratings_df)
 # TODO
 # We'll hold out 80% for training and leave 20% for testing 
 seed = 42
-train_df, test_df = <FILL_IN>
+train_df, test_df = ratings_df.randomSplit([0.8, 0.2], seed = seed)
 
 print(f"Training: {train_df.count()}, test: {test_df.count()}")
 
 train_df.show(3)
 test_df.show(3)
+
+# COMMAND ----------
+
+print(train_df.count())
+print(test_df.count())
 
 # COMMAND ----------
 
@@ -158,7 +163,7 @@ print(f"Baseline RMSE: {baseline_rmse:.3}")
 # TODO
 from pyspark.ml.recommendation import ALS
 
-als = ALS(maxIter=5, seed=seed, coldStartStrategy="drop", <FILL_IN>)
+als = ALS(maxIter=5, seed=seed, coldStartStrategy="drop", userCol="userId", itemCol="movieId", ratingCol="rating", nonnegative=True, regParam=0.1)
 
 # COMMAND ----------
 
@@ -179,15 +184,17 @@ assert als.getRatingCol() == "rating", f"Incorrect choice of {als.getRatingCol()
 # TODO
 from pyspark.ml.tuning import *
 from pyspark.ml.evaluation import RegressionEvaluator
+from pyspark.ml.tuning import CrossValidator, ParamGridBuilder
 
-reg_eval = <FILL_IN> # Create RegressionEvaluator
+reg_eval = RegressionEvaluator(labelCol="rating") # Create RegressionEvaluator
 
 grid = (
-        <FILL_IN> # Create grid for rank values 4 and 12 
+        ParamGridBuilder().addGrid(als.rank, [4, 12])
+        .build()# Create grid for rank values 4 and 12 
         )
 
 seed = 42
-cv = CrossValidator(<FILL_IN>) # Set number of folds to 3. Add grid, als, reg_eval, and seed           
+cv = CrossValidator(numFolds=3, estimator=als, evaluator=reg_eval, seed=seed, estimatorParamMaps=grid) # Set number of folds to 3. Add grid, als, reg_eval, and seed           
 
 cv_model = cv.fit(train_df)
 
@@ -215,10 +222,10 @@ assert my_model.rank == 12, f"Unexpected value for best rank. Expected 12, got {
 
 # TODO
 
-predicted_test_df = my_model.<FILL_IN>
+predicted_test_df = my_model.transform(test_df)
 
 # Run the previously created RMSE evaluator, reg_eval, on the predicted_test_df DataFrame
-test_rmse = <FILL_IN>
+test_rmse = reg_eval.evaluate(predicted_test_df)
 
 print(f"The model had a RMSE on the test set of {test_rmse}")
 
@@ -266,10 +273,16 @@ myUserId = 0
 
 # Note that the movie IDs are the *last* number on each line. A common error was to use the number of ratings as the movie ID.
 myRatedMovies = [
-     <FILL_IN>
+     #<FILL_IN>
      # The format of each line is (myUserId, movie ID, your rating)
      # For example, to give the movie "Star Wars: Episode IV - A New Hope (1977)" a five rating, you would add the following line:
      #   (myUserId, 260, 5),
+    (myUserId, 47, 5),
+    (myUserId, 356, 2),
+    (myUserId, 48780, 4),
+    (myUserId, 2762, 2),
+    (myUserId, 79132, 5)
+    
 ]
 
 my_ratings_df = spark.createDataFrame(myRatedMovies, ["userId", "movieId", "rating"])
@@ -285,11 +298,11 @@ display(my_ratings_df.limit(10))
 # COMMAND ----------
 
 # TODO
-training_with_my_ratings_df = <FILL_IN>
+training_with_my_ratings_df = train_df.union(my_ratings_df)
 
 count_diff = training_with_my_ratings_df.count() - train_df.count()
 print(f"The training dataset now has {count_diff} more entries than the original training dataset")
-assert (count_diff == myratings_df.count())
+assert (count_diff == my_ratings_df.count())
 
 # COMMAND ----------
 
@@ -304,10 +317,10 @@ assert (count_diff == myratings_df.count())
 
 # TODO
 
-als.<FILL_IN>
+als.setRank(12)
 
 # Create the model with these parameters
-my_ratings_model = als.<FILL_IN>
+my_ratings_model = als.fit(training_with_my_ratings_df)
 
 # COMMAND ----------
 
